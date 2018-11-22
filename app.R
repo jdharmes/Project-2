@@ -3,9 +3,7 @@ library(shinydashboard)
 library(tidyverse)
 library(plotly)
 library(ggplot2)
-library(RCurl)
 
-# Define UI for application that draws a histogram
 ui <- dashboardPage(
   
   # Application title
@@ -154,8 +152,6 @@ ui <- dashboardPage(
                            selected = "MortIncAAR"),
               hr(),
               #downloadButton("dlplot", "Download Plot"),
-              br(),
-              br(),
               downloadButton("dldata3", "Download Data")
           )
         )
@@ -221,8 +217,6 @@ server <- function(input, output) {
                       choices = as.list(levels(as.factor(cancer$State)))),
           hr(),
           #downloadButton("dlplot", "Download Plot"),
-          br(),
-          br(),
           downloadButton("dldata1", "Download Data")
       )
     } else {
@@ -244,8 +238,6 @@ server <- function(input, output) {
                       choices = as.list(levels(as.factor(cancer$State)))),
           hr(),
           #downloadButton("dlplot", "Download Plot"),
-          br(),
-          br(),
           downloadButton("dldata2", "Download Data")
       )
     }
@@ -260,8 +252,7 @@ server <- function(input, output) {
   output$bar <- renderPlotly({
     
     # Filter data as required
-    cancer2015 <- cancer %>% 
-      filter((Year == 2015) & (State == input$state))
+    cancer2015 <- getData1()
     
     if (input$mortinc == "Deaths") {
       
@@ -330,7 +321,7 @@ server <- function(input, output) {
   # Create scatter plot output
   output$scatter <- renderPlotly({
     # Filter data only by state
-    cancer_scat <- cancer %>% filter(State == input$state)
+    cancer_scat <- getData2()
     
     # Coerce data into appropriate types for plotting
     cancer_scat$Cancer <- as.factor(cancer_scat$Cancer)
@@ -389,7 +380,7 @@ server <- function(input, output) {
   
   output$scatter2 <- renderPlotly({
     # Store filtered data
-    cancer_scat2 <- cancer %>% filter(Cancer == input$cancer)
+    cancer_scat2 <- getData3()
     
     # Make Year variable factor
     cancer_scat2$Year <- as.factor(cancer_scat2$Year)
