@@ -4,6 +4,27 @@ library(tidyverse)
 library(plotly)
 library(ggplot2)
 
+
+# Store path for cancer data by state from 2006-2015
+url_cancer <- "https://raw.github.ncsu.edu/jdharmes/Project-2/master/Data.txt?token=AAAp0b3_OPVyDFnnYaExAUcRWirkqciKks5b_iiSwA%3D%3D"
+
+# Read TSV data
+cancer <- read_tsv(file = url_cancer, 
+                   n_max = 6329,
+                   col_names = c("Notes", "Year", "YearCode", "State", "StateCode", "Cancer", 
+                                 "CancerCode", "MortIncAAR", "Deaths", "Population", "MortAAR",
+                                 "Incidence", "IncAAR"),
+                   col_types = "ciiccccciinin",
+                   skip = 1)
+
+# Rename redundant variables of overall data
+cancer <- cancer %>% select(2, 4, 6, 8:13) 
+
+# Remove "(Unreliable)" markers from MortIncAAR column and place back into tbl
+clean <- str_split_fixed(cancer$MortIncAAR, " ", n = 2)
+cancer$MortIncAAR <- as.numeric(clean[,1])
+
+
 ui <- dashboardPage(
   
   # Application title
@@ -172,6 +193,7 @@ ui <- dashboardPage(
     )
   )
 )
+
 
 ############################################################################################
 
