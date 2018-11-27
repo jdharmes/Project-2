@@ -3,7 +3,7 @@ library(shinydashboard)
 library(tidyverse)
 library(plotly)
 library(ggplot2)
-
+library(webshot)
 
 # Store path for cancer data by state from 2006-2015
 url_cancer <- "https://raw.github.ncsu.edu/jdharmes/Project-2/master/Data.txt?token=AAAp0b3_OPVyDFnnYaExAUcRWirkqciKks5b_iiSwA%3D%3D"
@@ -128,13 +128,13 @@ ui <- dashboardPage(
                                  set. Death counts and rates may differ slightly from other reports 
                                  where deaths of persons of unknown age are included.")
                          )
-                      )
+                         )
                      
-                    )
+                         )
               
-              )
-          )
-      ),
+                     )
+                         )
+                       ),
       
       tabItem(
         tabName = "bystate", 
@@ -143,10 +143,10 @@ ui <- dashboardPage(
                         id = "tabset",
                         tabPanel(title = "Mortality/Incidence by State", 
                                  value = "tab1",
-                                 plotlyOutput("bar")),
+                                 plotlyOutput("bar")),     ####
                         tabPanel(title = "Mortality-Incidence AAR",
                                  value = "tab2",
-                                 plotlyOutput("scatter"))),
+                                 plotlyOutput("scatter"))), ####
                  box(width = 4, 
                      uiOutput("controls"))
         )
@@ -172,7 +172,9 @@ ui <- dashboardPage(
                                           "Incidence Age-Adjusted Rate" = "IncAAR"),
                            selected = "MortIncAAR"),
               hr(),
-              #downloadButton("dlplot", "Download Plot"),
+              downloadButton("dlscat2", "Download Plot"),
+              br(),
+              br(),
               downloadButton("dldata3", "Download Data")
           )
         )
@@ -187,37 +189,17 @@ ui <- dashboardPage(
                  style = "color:navy"),
               hr(),
               dataTableOutput("rawdata")
-            )
           )
         )
-    )
-  )
-)
-
+      )
+                         )
+                     )
+      )
 
 ############################################################################################
 
 # Define server logic
 server <- function(input, output) {
-  
-  # Store path for cancer data by state from 2006-2015
-  url_cancer <- "https://raw.github.ncsu.edu/jdharmes/Project-2/master/Data.txt?token=AAAp0b3_OPVyDFnnYaExAUcRWirkqciKks5b_iiSwA%3D%3D"
-    
-  # Read TSV data
-  cancer <- read_tsv(file = url_cancer, 
-                     n_max = 6329,
-                     col_names = c("Notes", "Year", "YearCode", "State", "StateCode", "Cancer", 
-                                   "CancerCode", "MortIncAAR", "Deaths", "Population", "MortAAR",
-                                   "Incidence", "IncAAR"),
-                     col_types = "ciiccccciinin",
-                     skip = 1)
-  
-  # Rename redundant variables of overall data
-  cancer <- cancer %>% select(2, 4, 6, 8:13) 
-  
-  # Remove "(Unreliable)" markers from MortIncAAR column and place back into tbl
-  clean <- str_split_fixed(cancer$MortIncAAR, " ", n = 2)
-  cancer$MortIncAAR <- as.numeric(clean[,1])
   
   # Dynamic UI components based on user activity
   output$controls <- renderUI({
@@ -238,7 +220,9 @@ server <- function(input, output) {
                       selected = "North Carolina",
                       choices = as.list(levels(as.factor(cancer$State)))),
           hr(),
-          #downloadButton("dlplot", "Download Plot"),
+          downloadButton("dlbar", "Download Bar Plot"),
+          br(),
+          br(),
           downloadButton("dldata1", "Download Data")
       )
     } else {
@@ -259,7 +243,9 @@ server <- function(input, output) {
                       selected = "North Carolina",
                       choices = as.list(levels(as.factor(cancer$State)))),
           hr(),
-          #downloadButton("dlplot", "Download Plot"),
+          actionButton("dlscat1", "Download Scatter Plot"),
+          br(),
+          br(),
           downloadButton("dldata2", "Download Data")
       )
     }
@@ -270,59 +256,67 @@ server <- function(input, output) {
     cancer %>% filter((Year == 2015) & (State == input$state))
   })
   
-  # Create bar plot object for output
-  output$bar <- renderPlotly({
-    
-    # Filter data as required
-    cancer2015 <- getData1()
-    
-    if (input$mortinc == "Deaths") {
+  barPlotly <- reactive({ 
+    if (is.null(input$state) || is.null(input$mortinc))
+      return()
+    else {
+      # Filter data as required
+      cancer2015 <- getData1()
       
-      # Create bar plot of mortality (for all 13 types of cancer)
-      barmort <- ggplot(cancer2015, aes(x = Cancer, y = Deaths)) + 
-        geom_col(fill = "cornflower blue") + 
-        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-        scale_x_discrete(labels = c("Colon", "Uterus", "Breast (F)", "Kidney", "Leukemias",
-                                    "Liver", "Lung", "Melanoma", "NH Lymphoma",
-                                    "Pancreas", "Prostate","Thyroid", "Bladder")) +
-        ylab("Deaths") +
-        ggtitle(paste0("Mortality for Top 13 Cancers in ", input$state))
-      
-      # Run through plotly
-      ggplotly(barmort)
-      
-    } else if (input$mortinc == "Incidence") {
-      
-      # Create bar plot of Incidence (for all cancer types)
-      barinc <- ggplot(cancer2015, aes(x = Cancer, y = Incidence)) + 
-        geom_col(fill = "cornflower blue") + 
-        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-        scale_x_discrete(labels = c("Colon", "Uterus", "Breast (F)", "Kidney", "Leukemias",
-                                    "Liver", "Lung", "Melanoma", "NH Lymphoma",
-                                    "Pancreas", "Prostate","Thyroid", "Bladder")) +
-        ylab(input$mortinc) +
-        ggtitle(paste0("Incidence for Top 13 Cancers in ", input$state))
-      
-      # Run through plotly
-      ggplotly(barinc)
-      
-    } else {
-      
-      # Create bar plot of both incidence and mortality
-      barmortinc <- ggplot(cancer2015, aes(x = Cancer, y = Incidence)) + 
-        geom_col(fill = "cornflower blue") + 
-        geom_col(aes(x = Cancer, y = Deaths), fill = "grey") +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-        scale_x_discrete(labels = c("Colon", "Uterus", "Breast (F)", "Kidney", "Leukemias",
-                                    "Liver", "Lung", "Melanoma", "NH Lymphoma",
-                                    "Pancreas", "Prostate","Thyroid", "Bladder")) +
-        ylab("Count") + 
-        ggtitle(paste0("Mortality and Incidence for Top 13 in ", input$state))
-      
-      # Run through plotly
-      ggplotly(barmortinc)
-      
+      if (input$mortinc == "Deaths") {
+        
+        # Create bar plot of mortality (for all 13 types of cancer)
+        barmort <- ggplot(cancer2015, aes(x = Cancer, y = Deaths)) + 
+          geom_col(fill = "cornflower blue") + 
+          theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+          scale_x_discrete(labels = c("Colon", "Uterus", "Breast (F)", "Kidney", "Leukemias",
+                                      "Liver", "Lung", "Melanoma", "NH Lymphoma",
+                                      "Pancreas", "Prostate","Thyroid", "Bladder")) +
+          ylab("Deaths") +
+          ggtitle(paste0("2015 Mortality for Top 13 Cancers in ", input$state))
+        
+        # Run through plotly
+        ggplotly(barmort)
+        
+      } else if (input$mortinc == "Incidence") {
+        
+        # Create bar plot of Incidence (for all cancer types)
+        barinc <- ggplot(cancer2015, aes(x = Cancer, y = Incidence)) + 
+          geom_col(fill = "cornflower blue") + 
+          theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+          scale_x_discrete(labels = c("Colon", "Uterus", "Breast (F)", "Kidney", "Leukemias",
+                                      "Liver", "Lung", "Melanoma", "NH Lymphoma",
+                                      "Pancreas", "Prostate","Thyroid", "Bladder")) +
+          ylab(input$mortinc) +
+          ggtitle(paste0("2015 Incidence for Top 13 Cancers in ", input$state))
+        
+        # Run through plotly
+        ggplotly(barinc)
+        
+      } else {
+        
+        # Create bar plot of both incidence and mortality
+        barmortinc <- ggplot(cancer2015, aes(x = Cancer, y = Incidence)) + 
+          geom_col(fill = "cornflower blue") + 
+          geom_col(aes(x = Cancer, y = Deaths), fill = "grey") +
+          theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+          scale_x_discrete(labels = c("Colon", "Uterus", "Breast (F)", "Kidney", "Leukemias",
+                                      "Liver", "Lung", "Melanoma", "NH Lymphoma",
+                                      "Pancreas", "Prostate","Thyroid", "Bladder")) +
+          ylab("Count") + 
+          ggtitle(paste0("2015 Mortality and Incidence for Top 13 in ", input$state))
+        
+        # Run through plotly
+        ggplotly(barmortinc)
+        
+      }
     }
+  })
+  
+  # Create bar plot object for plotly output
+  output$bar <- renderPlotly({
+    if (is.null(barPlotly())) return()
+    barPlotly()
   })
   
   # Download data for bar plot
@@ -340,49 +334,60 @@ server <- function(input, output) {
     cancer %>% filter((State == input$state))
   })
   
-  # Create scatter plot output
-  output$scatter <- renderPlotly({
-    # Filter data only by state
-    cancer_scat <- getData2()
-    
-    # Coerce data into appropriate types for plotting
-    cancer_scat$Cancer <- as.factor(cancer_scat$Cancer)
-    cancer_scat$MortIncAAR <- as.numeric(cancer_scat$MortIncAAR)
-    
-    # Create scatter plots conditionally based on input
-    if (input$mortaar == "MortIncAAR") {
-      # Scatter plot
-      scatmortinc <- ggplot(cancer_scat, aes(x = Year, y = MortIncAAR, color = Cancer)) + 
-        geom_point() + 
-        geom_line() +
-        scale_x_discrete(limits = c(2006:2015)) +
-        ylab("Mortality-Incidence Rate Ratio")
+  # Create scatter plotly object
+  scatterPlotly <- reactive({
+    if (is.null(input$state) || is.null(input$mortaar))
+      return()
+    else {
+      # Filter data only by state
+      cancer_scat <- getData2()
       
-      # Run through plotly
-      ggplotly(scatmortinc)
+      # Coerce data into appropriate types for plotting
+      cancer_scat$Cancer <- as.factor(cancer_scat$Cancer)
+      cancer_scat$MortIncAAR <- as.numeric(cancer_scat$MortIncAAR)
       
-    } else if (input$mortaar == "MortAAR") {
-      # Scatter plot
-      scatmort <- ggplot(cancer_scat, aes(x = Year, y = MortAAR, color = Cancer)) + 
-        geom_point() + 
-        geom_line() +
-        scale_x_discrete(limits = c(2006:2015)) +
-        ylab("Mortality Age-Adjusted Rate (per 100k)")
-      
-      # Run through plotly
-      ggplotly(scatmort)
-      
-    } else {
-      # Scatter plot
-      scatinc <- ggplot(cancer_scat, aes(x = Year, y = IncAAR, color = Cancer)) + 
-        geom_point() + 
-        geom_line() +
-        scale_x_discrete(limits = c(2006:2015)) +
-        ylab("Incidence Age-Adjusted Rate (per 100k)")
-      
-      # Run through plotly
-      ggplotly(scatinc)
+      # Create scatter plots conditionally based on input
+      if (input$mortaar == "MortIncAAR") {
+        # Scatter plot
+        scatmortinc <- ggplot(cancer_scat, aes(x = Year, y = MortIncAAR, color = Cancer)) + 
+          geom_point() + 
+          geom_line() +
+          scale_x_discrete(limits = c(2006:2015)) +
+          ylab("Mortality-Incidence Rate Ratio")
+        
+        # Run through plotly
+        ggplotly(scatmortinc)
+        
+      } else if (input$mortaar == "MortAAR") {
+        # Scatter plot
+        scatmort <- ggplot(cancer_scat, aes(x = Year, y = MortAAR, color = Cancer)) + 
+          geom_point() + 
+          geom_line() +
+          scale_x_discrete(limits = c(2006:2015)) +
+          ylab("Mortality Age-Adjusted Rate (per 100k)")
+        
+        # Run through plotly
+        ggplotly(scatmort)
+        
+      } else {
+        # Scatter plot
+        scatinc <- ggplot(cancer_scat, aes(x = Year, y = IncAAR, color = Cancer)) + 
+          geom_point() + 
+          geom_line() +
+          scale_x_discrete(limits = c(2006:2015)) +
+          ylab("Incidence Age-Adjusted Rate (per 100k)")
+        
+        # Run through plotly
+        ggplotly(scatinc)
+      }
     }
+    
+  })
+  
+  # Create bar plot object for plotly output
+  output$scatter <- renderPlotly({
+    if (is.null(scatterPlotly())) return()
+    scatterPlotly()
   })
   
   # Download data for scatter plot 1
@@ -395,12 +400,15 @@ server <- function(input, output) {
     }
   )
   
+  # Data for second scatter plot
   getData3 <- reactive({
     # Store filtered data
-    cancer_scat2 <- cancer %>% filter(Cancer == input$cancer)
+    cancer %>% filter(Cancer == input$cancer)
   })
   
-  output$scatter2 <- renderPlotly({
+  # Create second scatter plotly object
+  scatterPlotly2 <- reactive({
+    
     # Store filtered data
     cancer_scat2 <- getData3()
     
@@ -443,15 +451,11 @@ server <- function(input, output) {
     }
   })
   
-  # Download plot image (may clip edges of plot)
-  #output$dlplot <- downloadHandler(
-  #filename = function() {
-  # paste("cancerPlotly", "png", sep = ".")
-  #},
-  #content = function(file) {
-  #  export(p = last_plot(), file = file, vwidth = 2000, vheight = 2000)
-  #}
-  #)
+  # Create bar plot object for plotly output
+  output$scatter2 <- renderPlotly({
+    if (is.null(scatterPlotly2())) return()
+    scatterPlotly2()
+  })
   
   # Download data for scatter plot 2
   output$dldata3 <- downloadHandler(
@@ -463,12 +467,40 @@ server <- function(input, output) {
     }
   )
   
+  # Download bar plot image 
+  #observeEvent(input$dlbar, {
+  #filename = paste("barPlotly", "png", sep = ".")
+  #export(barPlotly(), file.path(getwd(), filename))
+  #})
+  
+  # Download plot image (may clip edges of plot)
+  output$dlbar <- downloadHandler(
+    filename = function() {
+      paste("barPlotly", "png", sep = ".")
+    },
+    content = function(file) {
+      export(p = barPlotly(), file = file)
+    }
+  )
+  
+  # Download first scatter plot image 
+  observeEvent(input$dlscat1, {
+    filename = paste("scatterPlotly", "png", sep = ".")
+    export(scatterPlotly(), file.path(getwd(), filename))
+  })
+  
+  # Download second scatter plot image 
+  observeEvent(input$dlscat2, {
+    filename = paste("scatterPlotly2", "png", sep = ".")
+    export(scatterPlotly2(), file.path(getwd(), filename))
+  })
+  
+  # Create output object with raw data table
   output$rawdata <- renderDataTable(
     cancer
   )
   
 }
-
 
 # Run the application 
 shinyApp(ui = ui, server = server)
