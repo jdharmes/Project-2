@@ -3,10 +3,14 @@ library(shinydashboard)
 library(tidyverse)
 library(plotly)
 library(ggplot2)
-library(webshot)
+#library(webshot)
+library(ciTools)
+library(tree)
+library(randomForest)
+library(glue)
 
 # Store path for cancer data by state from 2006-2015
-url_cancer <- "https://raw.github.ncsu.edu/jdharmes/Project-2/master/Data.txt?token=AAAp0b3_OPVyDFnnYaExAUcRWirkqciKks5b_iiSwA%3D%3D"
+url_cancer <- "https://raw.githubusercontent.com/jdharmes2/Project-2/master/Data.txt"
 
 # Read TSV data
 cancer <- read_tsv(file = url_cancer, 
@@ -24,6 +28,7 @@ cancer <- cancer %>% select(2, 4, 6, 8:13)
 clean <- str_split_fixed(cancer$MortIncAAR, " ", n = 2)
 cancer$MortIncAAR <- as.numeric(clean[,1])
 
+##########################################################################################
 
 ui <- dashboardPage(
   
@@ -36,6 +41,7 @@ ui <- dashboardPage(
       menuItem("Introduction", tabName = "intro"),
       menuItem("Mortality/Incidence by State", tabName = "bystate"),
       menuItem("Trends by Cancer Site", tabName = "trend"),
+      menuItem("Statistical Learning Predictions", tabName = "predict"),
       menuItem("Raw Data", tabName = "raw")
     )
   ),
@@ -90,51 +96,52 @@ ui <- dashboardPage(
                        tags$ul(
                          tags$li("Caution should be used when interpreting these Mortality Incidence
                                  Rate Ratios as coding for death certificates and cancer incidence 
-                                 records may vary significantly. The cancer incidence records are likely
-                                 to be coded to a more specific topographic site which may give a false
-                                 impression of an elevated rate ratio. Ratio values greater than 1 are 
-                                 flagged as 'Unreliable'.")
-                         )
-                         )),
+                                 records may vary significantly. The cancer incidence records are 
+                                 likely to be coded to a more specific topographic site which may 
+                                 give a false impression of an elevated rate ratio. Ratio values 
+                                 greater than 1 are flagged as 'Unreliable'.")
+                        )
+              )),
               column(width = 6,
                      div(
                        tags$ul(
                          tags$li("For consistency with the data on cancer incidence, the cancer 
                                  sites in mortality data were grouped according to the revised SEER 
                                  recodes dated January 27, 2003 (see SEER Cause of Death Recodes). 
-                                 Because NCHS uses different groupings for some sites, the death rates 
-                                 in this report may differ slightly from those published by NCHS. In 
-                                 addition, under the International Classification of Diseases (ICD), 
-                                 there are differences in mortality and incidence coding. For example, 
-                                 there are several codes for mesothelioma in ICD-10 (depending on the 
-                                 primary site). However in ICD-O-3, one code captures all of the primary
-                                 sites that mesothelioma affects. Note that Kaposi sarcoma deaths 
-                                 included in this dataset are only those deaths with underlying cause 
-                                 of death attributed to Kaposi Sarcoma, and do not include deaths where 
-                                 the condition was a contributing cause of death, or subsequent to 
-                                 another underlying condition."),
+                                 Because NCHS uses different groupings for some sites, the death 
+                                 rates in this report may differ slightly from those published by 
+                                 NCHS. In addition, under the International Classification of 
+                                 Diseases (ICD), there are differences in mortality and incidence 
+                                 coding. For example, there are several codes for mesothelioma in 
+                                 ICD-10 (depending on the primary site). However in ICD-O-3, one 
+                                 code captures all of the primary sites that mesothelioma affects. 
+                                 Note that Kaposi sarcoma deaths included in this dataset are only 
+                                 those deaths with underlying cause of death attributed to Kaposi 
+                                 Sarcoma, and do not include deaths where the condition was a 
+                                 contributing cause of death, or subsequent to another underlying 
+                                 condition."),
                          tags$li("The population used to age-adjust the rates in this report is the
                                  2000 U.S. standard population, which is in accordance with a 1998 
-                                 recommendation of the US. Department of Health and Human Services. The 
-                                 2000 U.S. standard population is based on the proportion of the 2000 
-                                 population in specific age groups (younger than 1 year, 1-4 years, 
-                                 5-9 years, 10-14 years, 15-19 years, . . . 85 years or older); the 
-                                 proportions of the 2000 population in these age groups serve as weights
-                                 for calculating age-adjusted incidence and death rates. NCHS, however,
-                                 uses a different set of age groups in its age adjustment of death 
-                                 rates, and thus the cancer death rates in this report may differ 
-                                 slightly from those published by NCHS."),
+                                 recommendation of the US. Department of Health and Human Services. 
+                                 The 2000 U.S. standard population is based on the proportion of 
+                                 the 2000 population in specific age groups (younger than 1 year, 
+                                 1-4 years, 5-9 years, 10-14 years, 15-19 years, ... 85 years or 
+                                 older); the proportions of the 2000 population in these age groups 
+                                 serve as weights for calculating age-adjusted incidence and death 
+                                 rates. NCHS, however, uses a different set of age groups in its 
+                                 age adjustment of death rates, and thus the cancer death rates in 
+                                 this report may differ slightly from those published by NCHS."),
                          tags$li("Deaths of persons of unknown age are not included in this data 
                                  set. Death counts and rates may differ slightly from other reports 
                                  where deaths of persons of unknown age are included.")
-                         )
-                         )
+                      )
+                    )
                      
-                         )
+                  )
               
-                     )
-                         )
-                       ),
+            )
+        )
+      ),
       
       tabItem(
         tabName = "bystate", 
@@ -143,10 +150,10 @@ ui <- dashboardPage(
                         id = "tabset",
                         tabPanel(title = "Mortality/Incidence by State", 
                                  value = "tab1",
-                                 plotlyOutput("bar")),     ####
+                                 plotlyOutput("bar")),     
                         tabPanel(title = "Mortality-Incidence AAR",
                                  value = "tab2",
-                                 plotlyOutput("scatter"))), ####
+                                 plotlyOutput("scatter"))),
                  box(width = 4, 
                      uiOutput("controls"))
         )
@@ -172,11 +179,32 @@ ui <- dashboardPage(
                                           "Incidence Age-Adjusted Rate" = "IncAAR"),
                            selected = "MortIncAAR"),
               hr(),
-              downloadButton("dlscat2", "Download Plot"),
+              #downloadButton("dlscat2", "Download Plot"),
+              #br(),
+              #br(),
+              downloadButton("dldata3", "Download Data"),
               br(),
               br(),
-              downloadButton("dldata3", "Download Data")
+              p("To download plot, open app in browser and use 'Download plot as png' 
+                button at top-left.")
           )
+        )
+      ),
+      tabItem(
+        tabName = "predict",
+        fluidRow(
+          box(width = 8,
+              h4("Linear Regression Model"),
+              hr(),
+              plotlyOutput("lm")),
+          box(width = 4,
+              title = "Controls for Regression Plot",
+              solidHeader = TRUE,
+              status = "primary",
+              selectInput("cancer", 
+                          "Select Cancer Site:",
+                          choices = as.list(levels(as.factor(cancer$Cancer))),
+                          selected = "Female Breast")
         )
       ),
       tabItem(
@@ -192,9 +220,9 @@ ui <- dashboardPage(
           )
         )
       )
-                         )
-                     )
-      )
+    )
+  )
+)
 
 ############################################################################################
 
@@ -220,10 +248,14 @@ server <- function(input, output) {
                       selected = "North Carolina",
                       choices = as.list(levels(as.factor(cancer$State)))),
           hr(),
-          downloadButton("dlbar", "Download Bar Plot"),
+          #downloadButton("dlbar", "Download Plot"),
+          #br(),
+          #br(),
+          downloadButton("dldata1", "Download Data"),
           br(),
           br(),
-          downloadButton("dldata1", "Download Data")
+          p("To download plot, open app in browser and use 'Download plot as png' button 
+            at top-left.")
       )
     } else {
       
@@ -243,10 +275,14 @@ server <- function(input, output) {
                       selected = "North Carolina",
                       choices = as.list(levels(as.factor(cancer$State)))),
           hr(),
-          actionButton("dlscat1", "Download Scatter Plot"),
+          #actionButton("dlscat1", "Download Plot"),
+          #br(),
+          #br(),
+          downloadButton("dldata2", "Download Data"),
           br(),
           br(),
-          downloadButton("dldata2", "Download Data")
+          p("To download plot, open app in browser and use 'Download plot as png' button 
+            at top-left.")      
       )
     }
   })
@@ -467,6 +503,20 @@ server <- function(input, output) {
     }
   )
   
+  output$lm <- reactive({
+    # Set seed for reproducibility
+    set.seed(100)
+    
+    # Sample rows randomly from the full data for an 80/20 (training/test) split
+    train <- sample(1:nrow(cancer), size = floor(nrow(cancer)*0.8))
+    test <- setdiff(1:nrow(cancer), train)
+    
+    
+  })
+  
+  
+  
+  
   # Download bar plot image 
   #observeEvent(input$dlbar, {
   #filename = paste("barPlotly", "png", sep = ".")
@@ -474,26 +524,26 @@ server <- function(input, output) {
   #})
   
   # Download plot image (may clip edges of plot)
-  output$dlbar <- downloadHandler(
-    filename = function() {
-      paste("barPlotly", "png", sep = ".")
-    },
-    content = function(file) {
-      export(p = barPlotly(), file = file)
-    }
-  )
+  #output$dlbar <- downloadHandler(
+  #  filename = function() {
+  #    paste("barPlotly", "png", sep = ".")
+  #  },
+  #  content = function(file) {
+  #    export(p = barPlotly(), file = file, expand = c(0, 500, 500, 0))
+  #  }
+  #)
   
   # Download first scatter plot image 
-  observeEvent(input$dlscat1, {
-    filename = paste("scatterPlotly", "png", sep = ".")
-    export(scatterPlotly(), file.path(getwd(), filename))
-  })
+  #observeEvent(input$dlscat1, {
+  #  filename = paste("scatterPlotly", "jpeg", sep = ".")
+  #  export(p = scatterPlotly(), file = file.path(getwd(), filename))
+  #})
   
   # Download second scatter plot image 
-  observeEvent(input$dlscat2, {
-    filename = paste("scatterPlotly2", "png", sep = ".")
-    export(scatterPlotly2(), file.path(getwd(), filename))
-  })
+  #observeEvent(input$dlscat2, {
+  #  filename = paste("scatterPlotly2", "png", sep = ".")
+  #  export(p = scatterPlotly2(), file = file.path(getwd(), filename))
+  #})
   
   # Create output object with raw data table
   output$rawdata <- renderDataTable(

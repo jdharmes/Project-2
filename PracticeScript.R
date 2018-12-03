@@ -224,5 +224,93 @@ output$dlplot <- downloadHandler(
   }
 )
 
+########################################### Project 3 ############################################
 
+# Store path for cancer data by state from 2006-2015
+url_cancer <- "https://raw.githubusercontent.com/jdharmes2/Project-2/master/Data.txt"
+
+# Read TSV data
+cancer <- read_tsv(file = url_cancer, 
+                   n_max = 6329,
+                   col_names = c("Notes", "Year", "YearCode", "State", "StateCode", "Cancer", 
+                                 "CancerCode", "MortIncAAR", "Deaths", "Population", "MortAAR",
+                                 "Incidence", "IncAAR"),
+                   col_types = "ciiccccciinin",
+                   skip = 1)
+
+# Rename redundant variables of overall data
+cancer <- cancer %>% select(2, 4, 6, 8:13) 
+
+# Remove "(Unreliable)" markers from MortIncAAR column and place back into tbl
+clean <- str_split_fixed(cancer$MortIncAAR, " ", n = 2)
+cancer$MortIncAAR <- as.numeric(clean[,1])
+
+colonCancerNC <- cancer %>% filter((State == "North Carolina") & (Cancer == "Colon and Rectum"))
+colonCancer <- cancer %>% filter((Cancer == "Colon and Rectum"))
+
+# Set seed for reproducibility
+set.seed(101)
+
+# Split into training and test sets
+train <- sample(1:nrow(cancer), nrow(cancer)*0.8)
+test <- setdiff(1:nrow(cancer), train)
+cancTrain <- cancer[train, ]
+cancTest <- cancer[test, ]
+
+# Linear regression model
+g <- ggplot(colonCancer, aes(x = Deaths, y = MortIncAAR, color = State)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) 
+  #scale_x_discrete(limits = c(2006:2015))
+ggplotly(g)
+
+lm(formula = Deaths ~ Year + State + Cancer + Population, data = cancer)
+linFit <- glm(formula = MortIncAAR ~ State*Cancer*Year, data = cancer)
+
+
+# Use ANOVA to improve model fit (whether interactions improve fit)
+anova(
+  lm(MortIncAAR ~ State*Cancer*Population + Year, data = cancer)
+)
+
+linPred <- predict(object = linFit, newdata = predDF, type = "response")
+
+
+# Create new data frame with empty response for predictions
+#predDF = cancer %>% 
+#  select(1:3, 6, 8) %>% 
+#  filter(Year == 2015) %>% 
+#  mutate(Year1 = 2016) %>%
+#  select(-1) %>%
+#  select(Year = Year1, everything())
+
+if (input$interaxn == "Yes") {
+  # Allow user to select variables used in model
+  thing <- glue(paste("State", "Cancer", "Year", sep = "*"))
+  formula <- paste("MortIncAAR~", thing)
+  
+  # Linear model with interaction effects
+  linFit <- lm(formula = MortIncAAR ~ State*Cancer*Year, data = cancTrain)
+  
+  # Make predictions on test set
+  linPred <- predict(object = linFit, newdata = cancTest, type = "response")
+  
+  # Create data frame with predictions and residuals
+  predDF <- cancTest %>% mutate(PredMortIncAAR = linPred, Residuals = PredMortIncAAR - MortIncAAR)
+  
+} else {
+  # Allow user to select variables used in model
+  thing <- paste( "State", "Cancer", "Year", sep = "+")
+  formula <- paste("MortIncAAR~", thing)
+  
+  # Linear model without interaction effects
+  linFit <- lm(as.formula(formula), data = cancTrain)
+  
+  # Make predictions on test set
+  linPred <- predict(object = linFit, newdata = cancTest, type = "response")
+  
+  # Create data frame with predictions and residuals
+  predDF <- cancTest %>% mutate(PredMortIncAAR = linPred, Residuals = PredMortIncAAR - MortIncAAR)
+  
+}
 
