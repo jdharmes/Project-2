@@ -258,9 +258,9 @@ cancTrain <- cancer[train, ]
 cancTest <- cancer[test, ]
 
 # Linear regression model
-g <- ggplot(colonCancer, aes(x = Deaths, y = MortIncAAR, color = State)) +
-  geom_point() +
-  geom_smooth(method = "lm", se = FALSE) 
+g <- ggplot(colonCancer, aes(x = Population, y = Deaths)) +
+  geom_point(aes(color = State)) +
+  geom_smooth(method = "glm", se = FALSE) 
   #scale_x_discrete(limits = c(2006:2015))
 ggplotly(g)
 

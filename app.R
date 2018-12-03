@@ -7,7 +7,6 @@ library(ggplot2)
 library(ciTools)
 library(tree)
 library(randomForest)
-library(glue)
 
 # Store path for cancer data by state from 2006-2015
 url_cancer <- "https://raw.githubusercontent.com/jdharmes2/Project-2/master/Data.txt"
@@ -193,18 +192,40 @@ ui <- dashboardPage(
       tabItem(
         tabName = "predict",
         fluidRow(
+          box(width = 4,
+              title = "Controls for Linear Regression Model",
+              solidHeader = TRUE,
+              collapsible = TRUE,
+              collapsed = FALSE,
+              status = "primary",
+              radioButtons("response", 
+                           "Select response variable to model:",
+                           choices = list("Mortality-Incidence Rate Ratio" = "MortIncAAR", 
+                                          "Mortality Age-Adjusted Rate" = "MortAAR", 
+                                          "Incidence Age-Adjusted Rate" = "IncAAR",
+                                          "Mortality" = "Deaths",
+                                          "Incidence"),
+                           selected = "MortIncAAR"),
+              selectizeInput("predictor",
+                             label = "Choose variables to predict on:",
+                             choices = list("Cancer",
+                                            "Population",
+                                            "State",
+                                            "Year"),
+                             selected = "Cancer",
+                             multiple = TRUE),
+              checkboxInput("interaxn", label = "Model interactions?")
+          ),
           box(width = 8,
+              verbatimTextOutput("lmSum")
+          )
+        ),
+        fluidRow(
+          box(width = 12, 
               h4("Linear Regression Model"),
               hr(),
-              plotlyOutput("lm")),
-          box(width = 4,
-              title = "Controls for Regression Plot",
-              solidHeader = TRUE,
-              status = "primary",
-              selectInput("cancer", 
-                          "Select Cancer Site:",
-                          choices = as.list(levels(as.factor(cancer$Cancer))),
-                          selected = "Female Breast")
+              dataTableOutput("lm"))
+          
         )
       ),
       tabItem(
@@ -510,11 +531,50 @@ server <- function(input, output) {
     # Sample rows randomly from the full data for an 80/20 (training/test) split
     train <- sample(1:nrow(cancer), size = floor(nrow(cancer)*0.8))
     test <- setdiff(1:nrow(cancer), train)
+    cancTrain <- cancer[train, ]
+    cancTest <- cancer[test, ]
     
+    if (!input$interaxn) {
+      # Allow user to select variables used in model
+      string <- paste(input$predictor, collapse = "+")
+      resp <- paste(input$response, " ~")
+      formula <- paste(resp, string, sep = " ")
+
+      # Linear model without interaction effects
+      linFit <- lm(formula = as.formula(formula), data = cancTrain)
+      
+      # Make predictions on test set
+      linPred <- predict(object = linFit, newdata = cancTest, type = "response")
+      
+      # Create data frame with predictions and residuals
+      cancTest %>% 
+        mutate(Predicted = linPred, Residuals = linPred - get(input$response)) %>%
+        as_tibble()
+      
+    } else {
+      # Allow user to select variables used in model
+      string <- paste(input$predictor, collapse = "*")
+      resp <- paste(input$response, " ~")
+      formula <- paste(resp, string, sep = " ")
+
+      # Linear model with interaction effects
+      linFit <- lm(formula = as.formula(formula), data = cancTrain)
+      
+      # Make predictions on test set
+      linPred <- predict(object = linFit, newdata = cancTest, type = "response")
+      
+      # Create data frame with predictions and residuals
+      cancTest %>% 
+        mutate(Predicted = linPred, Residuals = linPred - get(input$response)) %>%
+        as_tibble()
+      
+    }
     
   })
   
-  
+  output$lmSum <- renderPrint({
+    summary(linFit)
+  })
   
   
   # Download bar plot image 
