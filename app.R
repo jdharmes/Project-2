@@ -524,16 +524,16 @@ server <- function(input, output) {
     }
   )
   
-  output$lm <- reactive({
-    # Set seed for reproducibility
-    set.seed(100)
-    
-    # Sample rows randomly from the full data for an 80/20 (training/test) split
-    train <- sample(1:nrow(cancer), size = floor(nrow(cancer)*0.8))
-    test <- setdiff(1:nrow(cancer), train)
-    cancTrain <- cancer[train, ]
-    cancTest <- cancer[test, ]
-    
+  # Set seed for reproducibility
+  set.seed(100)
+  
+  # Sample rows randomly from the full data for an 80/20 (training/test) split
+  train <- sample(1:nrow(cancer), size = floor(nrow(cancer)*0.8))
+  test <- setdiff(1:nrow(cancer), train)
+  cancTrain <- cancer[train, ]
+  cancTest <- cancer[test, ]
+  
+  fit <- reactive({
     if (!input$interaxn) {
       # Allow user to select variables used in model
       string <- paste(input$predictor, collapse = "+")
@@ -541,15 +541,7 @@ server <- function(input, output) {
       formula <- paste(resp, string, sep = " ")
 
       # Linear model without interaction effects
-      linFit <- lm(formula = as.formula(formula), data = cancTrain)
-      
-      # Make predictions on test set
-      linPred <- predict(object = linFit, newdata = cancTest, type = "response")
-      
-      # Create data frame with predictions and residuals
-      cancTest %>% 
-        mutate(Predicted = linPred, Residuals = linPred - get(input$response)) %>%
-        as_tibble()
+      lm(formula = as.formula(formula), data = cancTrain)
       
     } else {
       # Allow user to select variables used in model
@@ -558,24 +550,23 @@ server <- function(input, output) {
       formula <- paste(resp, string, sep = " ")
 
       # Linear model with interaction effects
-      linFit <- lm(formula = as.formula(formula), data = cancTrain)
-      
-      # Make predictions on test set
-      linPred <- predict(object = linFit, newdata = cancTest, type = "response")
-      
-      # Create data frame with predictions and residuals
-      cancTest %>% 
-        mutate(Predicted = linPred, Residuals = linPred - get(input$response)) %>%
-        as_tibble()
-      
+      lm(formula = as.formula(formula), data = cancTrain)
     }
+  })
+  
+  output$lm <- renderDataTable({
+    # Make predictions on test set
+    linPred <- predict(object = fit(), newdata = cancTest, type = "response")
     
+    # Create data frame with predictions and residuals
+    cancTest %>% 
+      mutate(Predicted = linPred, Residuals = linPred - get(input$response)) %>%
+      as_tibble()
   })
   
   output$lmSum <- renderPrint({
-    summary(linFit)
+    summary(fit())
   })
-  
   
   # Download bar plot image 
   #observeEvent(input$dlbar, {
