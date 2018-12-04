@@ -318,10 +318,22 @@ cancTrain$State <- as.factor(cancTrain$State)
 cancTrain$Cancer <- as.factor(cancTrain$Cancer)
 cancTrain$Year <- as.factor(cancTrain$Year)
 
-rfTree <- randomForest(formula = MortIncAAR ~ ., data = cancTrain,
-                       mtry = 6, ntree = 200, importance = TRUE)
+cancTest$State <- as.factor(cancTest$State)
+cancTest$Cancer <- as.factor(cancTest$Cancer)
+cancTest$Year <- as.factor(cancTest$Year)
 
-Tree <- tree(formula = MortIncAAR ~ ., data = cancTrain)                       
+cancTrainRF <- cancTrain %>% select(-5, -7:-9)
+cancTestRF <- cancTest %>% select(-5, -7:-9)
+
+rfTree <- randomForest(formula = MortIncAAR ~ ., data = cancTrainRF,
+                       mtry = 3, ntree = 200, importance = TRUE)
+
+Tree <- tree(formula = MortIncAAR ~ ., data = cancTrain)
+
+predTree <- predict(rfTree, newdata = select(cancTestRF, -MortIncAAR))
+predTreeDF <- mutate(cancTest, Predicted = predTree, Residual = predTree - MortIncAAR, 
+                     RMSE = sqrt(mean(Residual^2)))
+
 summary(Tree)
 
 

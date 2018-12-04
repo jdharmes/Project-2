@@ -42,7 +42,8 @@ ui <- dashboardPage(
       menuItem("Trends by Cancer Site", tabName = "trend"),
       menuItem("Raw Data", tabName = "raw"),
       menuItem("Linear Regression Model", tabName = "linear"),
-      menuItem("Bootstrap Aggregation Model", tabName = "bag")
+      menuItem("Bootstrap Aggregation Model", tabName = "bag"),
+      menuItem("Principal Components Analysis", tabName = "pca")
     )
   ),
   
@@ -256,7 +257,7 @@ ui <- dashboardPage(
               collapsible = TRUE,
               collapsed = FALSE,
               status = "primary",
-              radioButtons("response", 
+              radioButtons("response2", 
                            "Select response variable to model:",
                            choices = list("Mortality-Incidence Rate Ratio" = "MortIncAAR", 
                                           "Mortality Age-Adjusted Rate" = "MortAAR", 
@@ -264,6 +265,11 @@ ui <- dashboardPage(
                                           "Mortality" = "Deaths",
                                           "Incidence"),
                            selected = "MortIncAAR"),
+              numericInput("mtry",
+                           "Number of variables per split:",
+                           min = 1,
+                           max = 8,
+                           value = 3),
               sliderInput("ntree", 
                           label = "Select number of trees:", 
                           min = 50, 
@@ -279,6 +285,42 @@ ui <- dashboardPage(
               h4("Bootstrap Aggregation Model"),
               hr(),
               plotOutput("RF"))
+        )
+      ),
+      tabItem(
+        tabName = "pca",
+        fluidRow(
+          box(width = 4,
+              title = "Controls for PCA",
+              solidHeader = TRUE,
+              collapsible = TRUE,
+              collapsed = FALSE,
+              status = "primary",
+              selectizeInput("remove", 
+                            "Select variables to remove from PCA:",
+                            choices = list("None" = " ",
+                                           "Year",
+                                           "Mortality-Incidence Rate Ratio" = "MortIncAAR", 
+                                           "Mortality Age-Adjusted Rate" = "MortAAR", 
+                                           "Incidence Age-Adjusted Rate" = "IncAAR",
+                                           "Mortality" = "Deaths",
+                                           "Incidence",
+                                           "Population"),
+                           selected = "None",
+                           multiple = TRUE),
+              radioButtons("pca_plot", 
+                           "Choose the PCA plot shown below:",
+                           choices = list("Biplot", "Screeplot"))
+          ),
+          box(width = 8,
+              verbatimTextOutput("pcaSum")
+          )
+        ),
+        fluidRow(
+          box(width = 12, 
+              h4("Principal Components Analysis"),
+              hr(),
+              plotOutput("pcaPlot"))
         )
       )
     )
@@ -612,16 +654,18 @@ server <- function(input, output) {
     
     # Create data frame with predictions and residuals
     predDF <- cancTest %>% 
-      mutate(Predicted = linPred, Residuals = linPred - get(input$response)) %>%
+      mutate(Predicted = linPred, Residual = linPred - get(input$response)) %>%
       as_tibble()
     
     # Return the ANOVA summary of model with test RMSE for evaluation
     list(
     ANOVA = anova(fit()),
-    TestRMSE = knitr::kable(summarize(predDF, TestRMSE = sqrt(mean(predDF$Residuals^2))))
+    TestRMSE = knitr::kable(summarize(predDF, TestRMSE = sqrt(mean(predDF$Residual^2))))
       
     )
   })
+  
+  ############################################ Download Buttons ####################################
   
   # Download bar plot image 
   #observeEvent(input$dlbar, {
@@ -651,42 +695,98 @@ server <- function(input, output) {
   #  export(p = scatterPlotly2(), file = file.path(getwd(), filename))
   #})
   
+  ########################################## Raw Data ############################################
+  
   # Create output object with raw data table
   output$rawdata <- renderDataTable(
     cancer
   )
   
-  cancTrain$State <- as.factor(cancTrain$State)
-  cancTrain$Cancer <- as.factor(cancTrain$Cancer)
-  cancTrain$Year <- as.factor(cancTrain$Year)
+  ########################################## Bagged Model ##########################################
   
   bagFit <- reactive({
+    cancTrain$State <- as.factor(cancTrain$State)
+    cancTrain$Cancer <- as.factor(cancTrain$Cancer)
+    cancTrain$Year <- as.factor(cancTrain$Year)
     
     # Allow user to select variables used in model
-    string <- paste(input$predictor, collapse = "+")
-    resp <- paste(input$response, " ~")
-    formula <- paste(resp, string, sep = " ")
-      
+    formula <- paste(input$response2, " ~ .")
+
     # Bootstrap aggregation model allowing user input on ntrees
     bagged <- randomForest(formula = as.formula(formula), 
                    data = cancTrain, 
-                   ntree = get(input$ntree),
-                   mtry = 3,
+                   ntree = input$ntree,
+                   mtry = input$mtry,
                    importance = TRUE)
   
   })
   
+  # Create summary of bagged model
   output$rfSum <- renderPrint({
-    predRF <- predict(bagFit(), newdata = select(cancTest - input$response))
-    summary(predRF)
+    cancTest$State <- as.factor(cancTest$State)
+    cancTest$Cancer <- as.factor(cancTest$Cancer)
+    cancTest$Year <- as.factor(cancTest$Year)
+    
+    bag <- bagFit()
+    
+    predRF <- predict(object = bag, newdata = select(cancTest, -contains(input$response2)))
+    bagPredDF <- mutate(cancTest, 
+                        Predicted = predRF, 
+                        Residual = predRF - get(input$response2),
+                        TestRMSE = sqrt(mean(Residual^2)))
+    
+    # Named list as output
+    list(BaggedModel = bag, 
+         ResidualSummary = summary(bagPredDF$Residual), 
+         TestRMSE = bagPredDF$TestRMSE[1])
   })
   
+  # Create plot showing the model error by ntrees used
   output$RF <- renderPlot({
-    predRF <- predict(bagFit(), newdata = select(cancTest - input$response))
-    plot(predRF)
+    bag <- bagFit()
+    plot(bag)
   })
   
   
+  ############################################### PCA #############################################
+  
+  # Principal Components Analysis (PCA)
+  pcaFit <- reactive({
+    if (is.null(input$remove)) {
+      # PCA on scaled/centered training set (minus input)
+      pca <- prcomp(x = select(cancTrain, -State, -Cancer), 
+                    center = TRUE, 
+                    scale. = TRUE)
+      pca
+    } else {
+      removed <- paste(input$remove, collapse = ", -")
+      
+      # PCA on scaled/centered training set (minus input)
+      pca <- prcomp(x = select(cancTrain, -State, -Cancer, -removed), 
+                    center = TRUE, 
+                    scale. = TRUE)
+      pca
+    }
+  })
+  
+  # Create summary of bagged model
+  output$pcaSum <- renderPrint({
+    list(Summary = summary(pcaFit()), 
+         PCA = pcaFit())
+  })
+  
+  # Create plot showing the model error by ntrees used
+  output$pcaPlot <- renderPlot({
+    pca <- pcaFit()
+    
+    # Allow user to pick plot visible
+    if (input$pca_plot == "Biplot") {
+      factoextra::fviz_pca_biplot(pca)
+    } else {
+      factoextra::fviz_screeplot(pca)
+    }
+    
+  })
   
 }
 
