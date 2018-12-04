@@ -66,7 +66,7 @@ ui <- dashboardPage(
           ),
           box(width = 4,
               withMathJax(),
-              h5("Equation for calculating the Mortality-Incidence Rate Ratio 
+              h5(strong("Equation"), "for calculating the Mortality-Incidence Rate Ratio 
                 (both rates age-adjusted): $$\\frac{Mortality  Rate}{Incidence  Rate}$$")
           )
         ),
