@@ -51,21 +51,25 @@ ui <- dashboardPage(
       tabItem(
         tabName = "intro",
         fluidRow(
-          box(
-            width = 7,
-            h4(strong("Introduction to the Application")),
+          box(width = 8,
+              h4(strong("Introduction to the Application")),
             
-            div(p("This application was designed to provide the user an easy, yet insightful, 
-                  way to analyse cancer mortality and incidence trends over the past 10 years 
-                  in the US. This data was obtained by request at the CDC WONDER webpage, 
-                  requesting the mortality and incidence data by state and year from 2006-2015 
-                  for only the top 13 cancer sites (representing over 80% of cancer cases in 
-                  the US)."), 
-                "You can find the ",
-                a("webpage here.", href = "https://wonder.cdc.gov/cancer.html", target = "_blank")
-            )
+              div(p("This application was designed to provide the user an easy, yet insightful, 
+                    way to analyse cancer mortality and incidence trends over the past 10 years 
+                    in the US. This data was obtained by request at the CDC WONDER webpage, 
+                    requesting the mortality and incidence data by state and year from 2006-2015 
+                    for only the top 13 cancer sites (representing over 80% of cancer cases in 
+                    the US)."), 
+                  "You can find the ",
+                  a("webpage here.", href = "https://wonder.cdc.gov/cancer.html", target = "_blank")
             )
           ),
+          box(width = 4,
+              withMathJax(),
+              h5("Equation for calculating the Mortality-Incidence Rate Ratio 
+                (both rates age-adjusted): $$\\frac{Mortality  Rate}{Incidence  Rate}$$")
+          )
+        ),
         fluidRow(
           box(width = 12,
               column(width = 6,
@@ -559,13 +563,29 @@ server <- function(input, output) {
     linPred <- predict(object = fit(), newdata = cancTest, type = "response")
     
     # Create data frame with predictions and residuals
-    cancTest %>% 
+    predDF <- cancTest %>% 
       mutate(Predicted = linPred, Residuals = linPred - get(input$response)) %>%
       as_tibble()
+    
+    predDF 
   })
   
-  output$lmSum <- renderPrint({
-    summary(fit())
+  output$lmSum <- renderTable({
+    # Make predictions on test set
+    linPred <- predict(object = fit(), newdata = cancTest, type = "response")
+    
+    # Create data frame with predictions and residuals
+    predDF <- cancTest %>% 
+      mutate(Predicted = linPred, Residuals = linPred - get(input$response)) %>%
+      as_tibble()
+    
+    # Return the ANOVA summary of model with test RMSE for evaluation
+    list(
+    anova(fit()),
+    predDF %>% 
+      summarize(TestRMSE = sqrt(mean(predDF$Residuals^2))) %>%
+      knitr::kable()
+    )
   })
   
   # Download bar plot image 
