@@ -226,10 +226,9 @@ ui <- dashboardPage(
         ),
         fluidRow(
           box(width = 12, 
-              h4("Linear Regression Model"),
+              h4("Linear Regression Model: Test Data with Predictions & Residuals"),
               hr(),
               dataTableOutput("lm"))
-          
         )
       ),
       tabItem(
@@ -570,7 +569,7 @@ server <- function(input, output) {
     predDF 
   })
   
-  output$lmSum <- renderTable({
+  output$lmSum <- renderPrint({
     # Make predictions on test set
     linPred <- predict(object = fit(), newdata = cancTest, type = "response")
     
@@ -581,10 +580,9 @@ server <- function(input, output) {
     
     # Return the ANOVA summary of model with test RMSE for evaluation
     list(
-    anova(fit()),
-    predDF %>% 
-      summarize(TestRMSE = sqrt(mean(predDF$Residuals^2))) %>%
-      knitr::kable()
+    ANOVA = anova(fit()),
+    TestRMSE = knitr::kable(summarize(predDF, TestRMSE = sqrt(mean(predDF$Residuals^2))))
+      
     )
   })
   
