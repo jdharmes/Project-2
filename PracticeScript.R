@@ -314,3 +314,14 @@ if (input$interaxn == "Yes") {
   
 }
 
+cancTrain$State <- as.factor(cancTrain$State)
+cancTrain$Cancer <- as.factor(cancTrain$Cancer)
+cancTrain$Year <- as.factor(cancTrain$Year)
+
+rfTree <- randomForest(formula = MortIncAAR ~ ., data = cancTrain,
+                       mtry = 6, ntree = 200, importance = TRUE)
+
+Tree <- tree(formula = MortIncAAR ~ ., data = cancTrain)                       
+summary(Tree)
+
+

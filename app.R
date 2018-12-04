@@ -40,8 +40,9 @@ ui <- dashboardPage(
       menuItem("Introduction", tabName = "intro"),
       menuItem("Mortality/Incidence by State", tabName = "bystate"),
       menuItem("Trends by Cancer Site", tabName = "trend"),
-      menuItem("Statistical Learning Predictions", tabName = "predict"),
-      menuItem("Raw Data", tabName = "raw")
+      menuItem("Raw Data", tabName = "raw"),
+      menuItem("Linear Regression Model", tabName = "linear"),
+      menuItem("Bootstrap Aggregation Model", tabName = "bag")
     )
   ),
   
@@ -193,8 +194,23 @@ ui <- dashboardPage(
           )
         )
       ),
+      
       tabItem(
-        tabName = "predict",
+        tabName = "raw",
+        fluidRow(
+          box(width = 12, 
+              h4("US Cancer Incidence & Mortality Statistics by State, 2006-2015", 
+                 style = "color:navy"),
+              h5("From Centers for Disease Control & Prevention",
+                 style = "color:navy"),
+              hr(),
+              dataTableOutput("rawdata")
+          )
+        )
+      ),
+      
+      tabItem(
+        tabName = "linear",
         fluidRow(
           box(width = 4,
               title = "Controls for Linear Regression Model",
@@ -232,16 +248,37 @@ ui <- dashboardPage(
         )
       ),
       tabItem(
-        tabName = "raw",
+        tabName = "bag",
+        fluidRow(
+          box(width = 4,
+              title = "Controls for Bootsrap Aggregation Model",
+              solidHeader = TRUE,
+              collapsible = TRUE,
+              collapsed = FALSE,
+              status = "primary",
+              radioButtons("response", 
+                           "Select response variable to model:",
+                           choices = list("Mortality-Incidence Rate Ratio" = "MortIncAAR", 
+                                          "Mortality Age-Adjusted Rate" = "MortAAR", 
+                                          "Incidence Age-Adjusted Rate" = "IncAAR",
+                                          "Mortality" = "Deaths",
+                                          "Incidence"),
+                           selected = "MortIncAAR"),
+              sliderInput("ntree", 
+                          label = "Select number of trees:", 
+                          min = 50, 
+                          max = 1000,
+                          value = 200)
+          ),
+          box(width = 8,
+              verbatimTextOutput("rfSum")
+          )
+        ),
         fluidRow(
           box(width = 12, 
-              h4("US Cancer Incidence & Mortality Statistics by State, 2006-2015", 
-                 style = "color:navy"),
-              h5("From Centers for Disease Control & Prevention",
-                 style = "color:navy"),
+              h4("Bootstrap Aggregation Model"),
               hr(),
-              dataTableOutput("rawdata")
-          )
+              plotOutput("RF"))
         )
       )
     )
@@ -618,6 +655,38 @@ server <- function(input, output) {
   output$rawdata <- renderDataTable(
     cancer
   )
+  
+  cancTrain$State <- as.factor(cancTrain$State)
+  cancTrain$Cancer <- as.factor(cancTrain$Cancer)
+  cancTrain$Year <- as.factor(cancTrain$Year)
+  
+  bagFit <- reactive({
+    
+    # Allow user to select variables used in model
+    string <- paste(input$predictor, collapse = "+")
+    resp <- paste(input$response, " ~")
+    formula <- paste(resp, string, sep = " ")
+      
+    # Bootstrap aggregation model allowing user input on ntrees
+    bagged <- randomForest(formula = as.formula(formula), 
+                   data = cancTrain, 
+                   ntree = get(input$ntree),
+                   mtry = 3,
+                   importance = TRUE)
+  
+  })
+  
+  output$rfSum <- renderPrint({
+    predRF <- predict(bagFit(), newdata = select(cancTest - input$response))
+    summary(predRF)
+  })
+  
+  output$RF <- renderPlot({
+    predRF <- predict(bagFit(), newdata = select(cancTest - input$response))
+    plot(predRF)
+  })
+  
+  
   
 }
 
