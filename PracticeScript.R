@@ -336,4 +336,26 @@ predTreeDF <- mutate(cancTest, Predicted = predTree, Residual = predTree - MortI
 
 summary(Tree)
 
+#################################################################################################
 
+unlist(str_split("Year,-Deaths,-Incidence", ","))
+
+noquote(unlist(strsplit("Year,-Deaths,-Incidence", ",")))
+
+unpack <- function (x) {
+  string <- paste(x, collapse = ",-")
+  charVec <- unlist(str_split(string, ","))
+  
+}
+
+for (i in 1:length(string)) {
+  
+}
+
+string <- unlist(str_split(c("Year,Deaths,Incidence"), ","))
+
+
+
+cancer[, unlist(str_split(c("Year, Deaths, Incidence"), ","))]
+
+select(cancer, - get(string[1]))

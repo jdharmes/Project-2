@@ -213,6 +213,9 @@ ui <- dashboardPage(
       tabItem(
         tabName = "linear",
         fluidRow(
+          box(width = 8,
+              verbatimTextOutput("lmSum")
+          ),
           box(width = 4,
               title = "Controls for Linear Regression Model",
               solidHeader = TRUE,
@@ -236,9 +239,6 @@ ui <- dashboardPage(
                              selected = "Cancer",
                              multiple = TRUE),
               checkboxInput("interaxn", label = "Model interactions?")
-          ),
-          box(width = 8,
-              verbatimTextOutput("lmSum")
           )
         ),
         fluidRow(
@@ -248,9 +248,13 @@ ui <- dashboardPage(
               dataTableOutput("lm"))
         )
       ),
+      
       tabItem(
         tabName = "bag",
         fluidRow(
+          box(width = 8,
+              verbatimTextOutput("rfSum")
+          ),
           box(width = 4,
               title = "Controls for Bootsrap Aggregation Model",
               solidHeader = TRUE,
@@ -266,18 +270,15 @@ ui <- dashboardPage(
                                           "Incidence"),
                            selected = "MortIncAAR"),
               numericInput("mtry",
-                           "Number of variables per split:",
+                           "Number of variables used per split:",
                            min = 1,
                            max = 8,
                            value = 3),
               sliderInput("ntree", 
-                          label = "Select number of trees:", 
+                          "Select number of trees:", 
                           min = 50, 
-                          max = 1000,
+                          max = 500,
                           value = 200)
-          ),
-          box(width = 8,
-              verbatimTextOutput("rfSum")
           )
         ),
         fluidRow(
@@ -287,9 +288,13 @@ ui <- dashboardPage(
               plotOutput("RF"))
         )
       ),
+      
       tabItem(
         tabName = "pca",
         fluidRow(
+          box(width = 8,
+              verbatimTextOutput("pcaSum")
+          ),
           box(width = 4,
               title = "Controls for PCA",
               solidHeader = TRUE,
@@ -298,7 +303,7 @@ ui <- dashboardPage(
               status = "primary",
               selectizeInput("remove", 
                             "Select variables to remove from PCA:",
-                            choices = list("None" = " ",
+                            choices = list("None" = "",
                                            "Year",
                                            "Mortality-Incidence Rate Ratio" = "MortIncAAR", 
                                            "Mortality Age-Adjusted Rate" = "MortAAR", 
@@ -310,15 +315,18 @@ ui <- dashboardPage(
                            multiple = TRUE),
               radioButtons("pca_plot", 
                            "Choose the PCA plot shown below:",
-                           choices = list("Biplot", "Screeplot"))
-          ),
-          box(width = 8,
-              verbatimTextOutput("pcaSum")
+                           choices = list("Biplot", "Screeplot")),
+              numericInput("comps", 
+                           "Number of components:",
+                           min = 1, 
+                           max = 7,
+                           value = 7,
+                           step = 1)
           )
         ),
         fluidRow(
           box(width = 12, 
-              h4("Principal Components Analysis"),
+              h4("Principal Components Analysis Plots"),
               hr(),
               plotOutput("pcaPlot"))
         )
@@ -389,6 +397,8 @@ server <- function(input, output) {
       )
     }
   })
+  
+  ############################################# Bar Plot ###########################################
   
   # Create reactive object for scatter data
   getData1 <- reactive({
@@ -468,6 +478,8 @@ server <- function(input, output) {
     }
   )
   
+  ########################################### Scatter 1 #########################################@
+  
   # Create reactive object for scatter data
   getData2 <- reactive({
     cancer %>% filter((State == input$state))
@@ -538,6 +550,8 @@ server <- function(input, output) {
       write_csv(getData2(), file)
     }
   )
+  
+  ##################################### Scatter 2 ############################################
   
   # Data for second scatter plot
   getData3 <- reactive({
@@ -752,19 +766,26 @@ server <- function(input, output) {
   
   # Principal Components Analysis (PCA)
   pcaFit <- reactive({
-    if (is.null(input$remove)) {
-      # PCA on scaled/centered training set (minus input)
-      pca <- prcomp(x = select(cancTrain, -State, -Cancer), 
-                    center = TRUE, 
-                    scale. = TRUE)
-      pca
-    } else {
-      removed <- paste(input$remove, collapse = ", -")
+    cancTrain <- cancTrain %>% select(-State, -Cancer)
+    
+    if (is.null(input$remove)|| input$remove == "None") {
       
       # PCA on scaled/centered training set (minus input)
-      pca <- prcomp(x = select(cancTrain, -State, -Cancer, -removed), 
+      pca <- prcomp(x = cancTrain, 
                     center = TRUE, 
-                    scale. = TRUE)
+                    scale. = TRUE,
+                    rank. = input$comps)
+      pca
+    } else {
+      
+      # Create string to hold names of user-selected variables to keep
+      remove <- unlist(str_split(paste(input$remove, collapse = ","), ","))
+
+      # PCA on scaled/centered training set (minus input)
+      pca <- prcomp(x = select(cancTrain, -one_of(remove)), 
+                    center = TRUE, 
+                    scale. = TRUE,
+                    rank. = input$comps)
       pca
     }
   })
@@ -781,8 +802,10 @@ server <- function(input, output) {
     
     # Allow user to pick plot visible
     if (input$pca_plot == "Biplot") {
+      # Render biplot
       factoextra::fviz_pca_biplot(pca)
     } else {
+      # Render screeplot (cumulative variance explained)
       factoextra::fviz_screeplot(pca)
     }
     
